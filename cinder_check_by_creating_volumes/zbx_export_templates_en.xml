@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<zabbix_export>
+    <version>5.0</version>
+    <date>2022-02-28T05:08:46Z</date>
+    <groups>
+        <group>
+            <name>XRobo Templates</name>
+        </group>
+    </groups>
+    <templates>
+        <template>
+            <template>XRobo OpenStack</template>
+            <name>XRobo OpenStack</name>
+            <groups>
+                <group>
+                    <name>XRobo Templates</name>
+                </group>
+            </groups>
+            <applications>
+                <application>
+                    <name>Cinder</name>
+                </application>
+            </applications>
+            <items>
+                <item>
+                    <name>VolumesCreating</name>
+                    <type>TRAP</type>
+                    <key>xrobo.cinder.volumescreating</key>
+                    <delay>0</delay>
+                    <history>1d</history>
+                    <trends>0</trends>
+                    <value_type>TEXT</value_type>
+                    <applications>
+                        <application>
+                            <name>Cinder</name>
+                        </application>
+                    </applications>
+                    <triggers>
+                        <trigger>
+                            <expression>{nodata(20m)}=1</expression>
+                            <name>Timeout of receiving data from the script of creating volumes.</name>
+                            <priority>WARNING</priority>
+                            <description>Check the script of creating volumes as well as &quot;stucked&quot; volumes.</description>
+                            <manual_close>YES</manual_close>
+                        </trigger>
+                    </triggers>
+                </item>
+                <item>
+                    <name>VolumesCreatingFail</name>
+                    <type>DEPENDENT</type>
+                    <key>xrobo.cinder.volumescreating.fail</key>
+                    <delay>0</delay>
+                    <history>1d</history>
+                    <trends>0</trends>
+                    <value_type>TEXT</value_type>
+                    <applications>
+                        <application>
+                            <name>Cinder</name>
+                        </application>
+                    </applications>
+                    <preprocessing>
+                        <step>
+                            <type>JSONPATH</type>
+                            <params>$.fail</params>
+                        </step>
+                    </preprocessing>
+                    <master_item>
+                        <key>xrobo.cinder.volumescreating</key>
+                    </master_item>
+                    <triggers>
+                        <trigger>
+                            <expression>{last(#3)}&lt;&gt;&quot;&quot; and&#13;
+{last()}&lt;&gt;&quot;&quot; and&#13;
+{prev()}&lt;&gt;&quot;&quot;</expression>
+                            <name>Fail to create volume(s) [{ITEM.VALUE}]</name>
+                            <priority>HIGH</priority>
+                            <description>Check the script of creating volumes for the pair &quot;availability zone/volume type&quot;.</description>
+                            <manual_close>YES</manual_close>
+                        </trigger>
+                        <trigger>
+                            <expression>{last()}&lt;&gt;&quot;&quot;</expression>
+                            <name>Fail to create volume(s) [{ITEM.VALUE}] (temporary, maybe)</name>
+                            <priority>WARNING</priority>
+                            <description>Fail to create a volume &quot;availability zone\volume type&quot;. This could be due to temporary issues. Script will try to create it again.</description>
+                            <manual_close>YES</manual_close>
+                            <dependencies>
+                                <dependency>
+                                    <name>Fail to create volume(s) [{ITEM.VALUE}]</name>
+                                    <expression>{XRobo OpenStack:xrobo.cinder.volumescreating.fail.last(#3)}&lt;&gt;&quot;&quot; and&#13;
+{XRobo OpenStack:xrobo.cinder.volumescreating.fail.last()}&lt;&gt;&quot;&quot; and&#13;
+{XRobo OpenStack:xrobo.cinder.volumescreating.fail.prev()}&lt;&gt;&quot;&quot;</expression>
+                                </dependency>
+                            </dependencies>
+                        </trigger>
+                    </triggers>
+                </item>
+            </items>
+        </template>
+    </templates>
+</zabbix_export>

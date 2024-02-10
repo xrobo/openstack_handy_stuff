@@ -1,0 +1,405 @@
+# This file must be used with "source bin/activate" *from bash*
+# you cannot run it directly
+#
+# Please, use KA_ (kolla-ansible) global variable and ka_ for function
+# names prefix to unset them "automaticaly" during deactivation
+
+
+deactivate(){
+    unset -f pydoc >/dev/null 2>&1
+
+    # reset old environment variables
+    # ! [ -z ${VAR+_} ] returns true if VAR is declared at all
+    if ! [ -z "${_OLD_VIRTUAL_PATH+_}" ] ; then
+        PATH="$_OLD_VIRTUAL_PATH"
+        export PATH
+        unset _OLD_VIRTUAL_PATH
+    fi
+    if ! [ -z "${_OLD_VIRTUAL_PYTHONHOME+_}" ] ; then
+        PYTHONHOME="$_OLD_VIRTUAL_PYTHONHOME"
+        export PYTHONHOME
+        unset _OLD_VIRTUAL_PYTHONHOME
+    fi
+
+    # This should detect bash and zsh, which have a hash command that must
+    # be called to get it to forget past commands.  Without forgetting
+    # past commands the $PATH changes we made may not be respected
+    if [ -n "${BASH-}" ] || [ -n "${ZSH_VERSION-}" ] ; then
+        hash -r 2>/dev/null
+    fi
+
+    if ! [ -z "${_OLD_VIRTUAL_PS1+_}" ] ; then
+        PS1="$_OLD_VIRTUAL_PS1"
+        export PS1
+        unset _OLD_VIRTUAL_PS1
+    fi
+
+	unset STAGE
+	unset INVENTORY
+	unset BRANCH_CONFIGS_DIR
+	unset PASSWORDS_FILE
+    unset EXTRA_OPTS
+    unset VIRTUAL_ENV
+    unset PROMPT_COMMAND
+    unset VIRTUAL_ENV_DISABLE_PROMPT
+
+    [[ -z "$1" ]] && ka_log deactivation
+
+    unset ${!KA_*}
+    unset -f $(declare -F | \grep --color=never -o 'ka_.*')
+
+	if [ ! "${1-}" = "nondestructive" ] ; then
+    	# Self destruct!
+        unset -f deactivate
+    fi
+}
+
+# unset irrelevant variables
+deactivate nondestructive
+
+ka_color(){
+    echo "\\033[${1}m${2}\\033[0m"
+}
+
+ka_fail_message(){
+    echo -e "$(ka_color '01;31' 'Failed:') $1" >&2
+    [ -n "${2:+_}" ] && echo -e $(ka_color 2 "(hint): $2") >&2
+}
+
+ka_source_config(){
+    local notice="
+    Configuration file '$KA_USER_CONFIG' has been created.
+
+    NOTE: This environment requires a user's personal configuration file which describes
+          the stages and corresponding variables including paths to their git-repository
+          directories.
+
+          Such a configuration file with the default settings has just been created.
+          Please inspect it and adjust the variables if needed.
+"
+    if [[ ! -f "$KA_USER_CONFIG" ]]; then
+        if echo 2>/dev/null "$KA_DEFAULT_CONFIG" > "$KA_USER_CONFIG"; then
+            echo
+            echo "$notice"
+            echo
+            read -p "Press any key to continue..." -n 1 -s
+            echo
+            echo
+        else
+            ka_fail_message "Could not create the configuration file" \
+                "Make sure you are able to create file '$KA_USER_CONFIG'"
+            return 1
+        fi
+    fi
+    source $KA_USER_CONFIG
+}
+
+ka_set_virtual_env(){
+    local suffix="bin/$(basename $BASH_SOURCE)"
+    if [[ "x${BASH_SOURCE%/${suffix}}" != "x${BASH_SOURCE}" ]]; then
+        export VIRTUAL_ENV="$(cd ${BASH_SOURCE%/${suffix}} && pwd)"
+
+        _OLD_VIRTUAL_PATH="$PATH"
+        PATH="$VIRTUAL_ENV/bin:$PATH"
+        export PATH
+        
+        # unset PYTHONHOME if set
+        if ! [ -z "${PYTHONHOME+_}" ] ; then
+            _OLD_VIRTUAL_PYTHONHOME="$PYTHONHOME"
+            unset PYTHONHOME
+        fi
+
+        # Make sure to unalias pydoc if it's already there
+        alias pydoc 2>/dev/null >/dev/null && unalias pydoc
+
+        # This should detect bash and zsh, which have a hash command that must
+        # be called to get it to forget past commands.  Without forgetting
+        # past commands the $PATH changes we made may not be respected
+        if [ -n "${BASH-}" ] || [ -n "${ZSH_VERSION-}" ] ; then
+            hash -r 2>/dev/null
+        fi
+    else
+        ka_fail_message "Can not strip '$suffix' from '$BASH_SOURCE'" \
+            "Try the activation from another directory"
+        return 1
+    fi
+}
+
+ka_color_ps1(){
+    echo "\\[\\033[${1}m\\]${2}\\[\\033[00m\\]"
+}
+
+ka_show_stage_branch(){
+    local stage=$1
+    local var_dir=$2
+    local var_branch=$3
+
+    local branch="$(ka_get_stage_var $stage $var_branch)"
+    local git_branch=$(ka_git_get_branch "$(ka_get_stage_var $stage $var_dir)")
+
+    [[ "$branch" != "$git_branch" ]] \
+        && branch="$(ka_color 1 "$git_branch") ('${branch}' in the configuration file)"
+
+    echo "$branch"
+}
+
+ka_show_stage(){
+    local stage=$1
+    local index=$2
+    local name=${stage#'KA_STAGE_'}
+    local description=$(ka_get_stage_var $stage description)
+    local pscolor=$(ka_get_stage_var $stage pscolor)
+
+    branch_ansible=$(ka_show_stage_branch $stage branch_ansible_dir branch_ansible)
+    branch_configs=$(ka_show_stage_branch $stage branch_configs_dir branch_configs)
+
+    local content="
+    ${index}. [$(ka_color $pscolor $name)] $description
+       Git branches:
+            ● ansible: $branch_ansible
+                       $(ka_get_stage_var $stage branch_ansible_dir)
+            ● configs: $branch_configs
+                       $(ka_get_stage_var $stage branch_configs_dir)
+       Inventory file: $(ka_get_stage_var $stage inventory)
+       Passwords file: $(ka_get_stage_var $stage passwords_file)"
+
+
+    echo -e "$content"
+}
+
+ka_get_stage_var(){
+    local varname="${1}['${2}']"
+    echo ${!varname}
+}
+
+ka_set_git_branch_vars(){
+    local varname
+    for i in ANSIBLE CONFIGS; do
+        varname=KA_BRANCH_${i}_DIR
+        eval KA_GIT_BRANCH_${i}=$(ka_git_get_branch "${!varname}")
+        eval KA_GIT_BRANCH_${i}_UNCOMMITTED=$(ka_git_get_status "${!varname}")
+    done
+    unset i
+}
+
+ka_select_stage(){
+    local index=0
+    local stages
+
+    if [[ -z "${!KA_STAGE_*}" ]]; then
+        ka_fail_message "Stage list is empty" \
+            "Make sure the configuration file '$KA_USER_CONFIG' defines your stages"
+        return 1
+    fi
+
+    echo 'Environment list:'
+    
+    for stage in ${!KA_STAGE_*}; do
+        stages[((++index))]=$stage
+        ka_show_stage $stage $index
+    done
+
+    echo
+    read -p "Select an environment [${index}]: "
+    case $REPLY in
+    	[1-${index#}]) index=$REPLY ;;
+    esac
+
+    KA_STAGE=${stages[$index]}
+
+    KA_STAGE_NAME=${KA_STAGE#'KA_STAGE_'}
+
+    export KA_INVENTORY=$(ka_get_stage_var $KA_STAGE inventory)
+    
+    export KA_BRANCH_ANSIBLE_DIR=$(ka_get_stage_var $KA_STAGE branch_ansible_dir)
+
+    export KA_BRANCH_ANSIBLE=$(ka_get_stage_var $KA_STAGE branch_ansible)
+
+    export KA_BRANCH_CONFIGS_DIR=$(ka_get_stage_var $KA_STAGE branch_configs_dir)
+
+    export KA_BRANCH_CONFIGS=$(ka_get_stage_var $KA_STAGE branch_configs)
+
+    export KA_PASSWORDS_FILE=$(ka_get_stage_var $KA_STAGE passwords_file)
+
+    KA_STAGE_COLOR=$(ka_get_stage_var $KA_STAGE pscolor)
+
+    ka_set_git_branch_vars
+}
+
+ka_git_get_branch(){
+    local output
+    local gitdir=$1
+    local branch="_not_a_git_repository_"
+    output=$(git --git-dir "${gitdir}/.git" --work-tree "${gitdir}" rev-parse --abbrev-ref HEAD 2>/dev/null) \
+        && branch="${output}"
+    echo "$branch"
+}
+
+ka_git_get_status(){
+    local output
+    local gitdir=$1
+    output=$(git --git-dir "${gitdir}/.git" --work-tree "${gitdir}" status --porcelain 2>&1) \
+        && echo ${output:+1}
+}
+
+ka_ps1(){
+    local uncommitted_mark='*'
+    local uncommitted_color='01;33'
+	local bhash="${KA_GIT_BRANCH_ANSIBLE}${KA_GIT_BRANCH_ANSIBLE_UNCOMMITTED}${KA_GIT_BRANCH_CONFIGS}${KA_GIT_BRANCH_CONFIGS_UNCOMMITTED}"
+
+	if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT-}" ] ; then
+	    _OLD_VIRTUAL_PS1="$PS1"
+        VIRTUAL_ENV_DISABLE_PROMPT=1
+	fi
+
+    ka_set_git_branch_vars
+
+	[[  $bhash == "${KA_GIT_BRANCH_ANSIBLE}${KA_GIT_BRANCH_ANSIBLE_UNCOMMITTED}${KA_GIT_BRANCH_CONFIGS}${KA_GIT_BRANCH_CONFIGS_UNCOMMITTED}" ]] \
+	|| ka_log branch
+
+    PS1=[$(ka_color_ps1 $KA_STAGE_COLOR $KA_STAGE_NAME)]
+    PS1+='('
+    PS1+="$KA_GIT_BRANCH_ANSIBLE"
+    [ -n "$KA_GIT_BRANCH_ANSIBLE_UNCOMMITTED" ] \
+        && PS1+=$(ka_color_ps1 "$uncommitted_color" "$uncommitted_mark")
+    PS1+='/'
+    PS1+="$KA_GIT_BRANCH_CONFIGS"
+    [ -n "$KA_GIT_BRANCH_CONFIGS_UNCOMMITTED" ] \
+        && PS1+=$(ka_color_ps1 "$uncommitted_color" "$uncommitted_mark")
+    PS1+=')'
+    PS1+=" ${_OLD_VIRTUAL_PS1}"
+
+    export PS1
+}
+
+
+ka_log(){
+    # 
+    # Here's the example of commands to set required permissions to the log file:
+    #
+    # sudo touch '$KA_LOGFILE'
+    # sudo setfacl -m g:'domain users':rw,u:kolla:rw '$KA_LOGFILE'
+    #
+
+    local uncommitted_mark='*'
+
+    local bline="Ansible (${KA_GIT_BRANCH_ANSIBLE}"
+    [ -n "$KA_GIT_BRANCH_ANSIBLE_UNCOMMITTED" ] && bline+="$uncommitted_mark"
+    bline+="): '$KA_BRANCH_ANSIBLE_DIR'; Configs (${KA_GIT_BRANCH_CONFIGS}"
+    [ -n "$KA_GIT_BRANCH_CONFIGS_UNCOMMITTED" ] && bline+="$uncommitted_mark"
+    bline+="): '$KA_BRANCH_CONFIGS_DIR'"
+
+    local line="$(date '+%Y-%m-%d %H:%M:%S') "
+
+    case $1 in
+        a*) line+="[${KA_SID}_activ] " ;;
+        d*) line+="[${KA_SID}_deact] " ;;
+        b*) line+="[${KA_SID}_brnch] " ;;
+        k*) line+="[${KA_SID}_kolla] " ;;
+        p*) line+="[${KA_SID}_playb] " ;;
+    esac
+
+    line+="${KA_LOGNAME}: "
+
+    case $1 in
+		a*) line+="${bline}; ShellPID: $$" ;;
+        b*) line+=$bline ;;
+		d*) line+="Bye" ;;
+        k*) line+="$ACTION : $CMD" ;;
+        p*) line+="$ACTION : Ansible-playbook failed" ;;
+    esac
+
+
+    if ! echo 2>/dev/null "$line" >> "$KA_LOGFILE"; then
+        ka_fail_message "Can't write to log-file" \
+            "Make sure '$KA_LOGFILE' exists and writable"
+        return 1
+	fi
+}
+
+ka_gensid(){
+    local uuid=$(uuidgen)
+    echo ${uuid:0:3}
+}
+
+ka_git_clone(){
+    [[ "$KA_USER" != "kolla" ]] && return 0
+
+    local project cmd var_branch var_dir
+
+    for project in ansible configs; do
+        var_branch="KA_BRANCH_${project^^}"
+        var_dir="KA_BRANCH_${project^^}_DIR"
+        echo -e -n "Pull/Checkout ${project} '${!var_branch}'..."
+        for cmd in "pull --all" "checkout ${!var_branch}" "pull" "reset --hard"; do
+            git --git-dir "${!var_dir}/.git" --work-tree "${!var_dir}" $cmd >/dev/null \
+            || {
+                 ka_fail_message "Git command failed" "Check out git output for details"
+                 return 1
+               }
+        done
+    done
+}
+
+read -r -d '' KA_DEFAULT_CONFIG << TXT
+#
+# Stages declaration
+# - each stage should be declared via variable with prefix KA_STAGE_
+#
+
+declare -Ag KA_STAGE_PROD
+declare -Ag KA_STAGE_TEST
+
+KA_STAGE_PROD=(
+	['description']='Production'
+	['pscolor']='1;31'
+	['inventory']=~/work/kolla-configs/inventory
+	['passwords_file']=/opt/xrobo/prod/secrets/passwords.yml
+	['branch_configs_dir']=~/work/kolla-configs
+	['branch_configs']='master'
+	['branch_ansible_dir']=~/work/kolla-ansible
+	['branch_ansible']='master'
+)
+
+KA_STAGE_TEST=(
+	['description']='Test'
+	['pscolor']='0;33'
+	['inventory']=~/work/kolla-configs/inventory
+	['passwords_file']=/opt/xrobo/test/secrets/passwords.yml
+	['branch_configs_dir']=~/work/kolla-configs
+	['branch_configs']='test'
+	['branch_ansible_dir']=~/work/kolla-ansible
+	['branch_ansible']='master'
+)
+
+#
+TXT
+KA_USER_CONFIG=~/.kolla-venv.rc
+export KA_LOGFILE=/var/log/xrobo/kolla-venv.log
+export KA_SID=$(ka_gensid)
+export KA_GIT_BRANCH_ANSIBLE
+export KA_GIT_BRANCH_ANSIBLE_UNCOMMITTED
+export KA_GIT_BRANCH_CONFIGS
+export KA_GIT_BRANCH_CONFIGS_UNCOMMITTED
+export KA_USER=$(id -un)
+KA_LOGNAME=$(logname 2>/dev/null) \
+    && export KA_LOGNAME="$KA_USER (${KA_LOGNAME})" \
+    || export KA_LOGNAME=$KA_USER
+
+ka_set_virtual_env \
+    && ka_source_config \
+    && ka_select_stage \
+    && ka_git_clone \
+    && ka_log activation \
+    || { deactivate nolog; return 1; }
+
+PROMPT_COMMAND="ka_ps1;"
+export -f ka_fail_message
+export -f ka_color
+export -f ka_log
+
+pydoc () {
+    python -m pydoc "$@"
+}
+
+# vim: ts=4 ft=sh

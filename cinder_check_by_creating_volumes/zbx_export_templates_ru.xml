@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<zabbix_export>
+    <version>5.0</version>
+    <date>2022-02-28T05:08:46Z</date>
+    <groups>
+        <group>
+            <name>XRobo Templates</name>
+        </group>
+    </groups>
+    <templates>
+        <template>
+            <template>XRobo OpenStack</template>
+            <name>XRobo OpenStack</name>
+            <groups>
+                <group>
+                    <name>XRobo Templates</name>
+                </group>
+            </groups>
+            <applications>
+                <application>
+                    <name>Cinder</name>
+                </application>
+            </applications>
+            <items>
+                <item>
+                    <name>VolumesCreating</name>
+                    <type>TRAP</type>
+                    <key>xrobo.cinder.volumescreating</key>
+                    <delay>0</delay>
+                    <history>1d</history>
+                    <trends>0</trends>
+                    <value_type>TEXT</value_type>
+                    <applications>
+                        <application>
+                            <name>Cinder</name>
+                        </application>
+                    </applications>
+                    <triggers>
+                        <trigger>
+                            <expression>{nodata(20m)}=1</expression>
+                            <name>Не приходят данные от скрипта мониторинга службы Cinder</name>
+                            <priority>WARNING</priority>
+                            <description>Проверьте работу скрипта мониторинга работы службы Cinder (создание тестовых дисков).</description>
+                            <manual_close>YES</manual_close>
+                        </trigger>
+                    </triggers>
+                </item>
+                <item>
+                    <name>VolumesCreatingFail</name>
+                    <type>DEPENDENT</type>
+                    <key>xrobo.cinder.volumescreating.fail</key>
+                    <delay>0</delay>
+                    <history>1d</history>
+                    <trends>0</trends>
+                    <value_type>TEXT</value_type>
+                    <applications>
+                        <application>
+                            <name>Cinder</name>
+                        </application>
+                    </applications>
+                    <preprocessing>
+                        <step>
+                            <type>JSONPATH</type>
+                            <params>$.fail</params>
+                        </step>
+                    </preprocessing>
+                    <master_item>
+                        <key>xrobo.cinder.volumescreating</key>
+                    </master_item>
+                    <triggers>
+                        <trigger>
+                            <expression>{last(#3)}&lt;&gt;&quot;&quot; and&#13;
+{last()}&lt;&gt;&quot;&quot; and&#13;
+{prev()}&lt;&gt;&quot;&quot;</expression>
+                            <name>Ошибка создания вольюма(ов) [{ITEM.VALUE}]</name>
+                            <priority>HIGH</priority>
+                            <description>Проверьте работу службы Cinder для указанной пары &quot;зона доступности/тип диска&quot;.</description>
+                            <manual_close>YES</manual_close>
+                        </trigger>
+                        <trigger>
+                            <expression>{last()}&lt;&gt;&quot;&quot;</expression>
+                            <name>Ошибка создания вольюма(ов) [{ITEM.VALUE}] (Возможно, временно)</name>
+                            <priority>WARNING</priority>
+                            <description>Ошибка создания диска с заданными свойствами &quot;зона доступности\тип диска&quot;. Возможно, причиной является временные сложности работы платформы. Попытки создания диска будут продолжены.</description>
+                            <manual_close>YES</manual_close>
+                            <dependencies>
+                                <dependency>
+                                    <name>Ошибка создания вольюма(ов) [{ITEM.VALUE}]</name>
+                                    <expression>{XRobo OpenStack:xrobo.cinder.volumescreating.fail.last(#3)}&lt;&gt;&quot;&quot; and&#13;
+{XRobo OpenStack:xrobo.cinder.volumescreating.fail.last()}&lt;&gt;&quot;&quot; and&#13;
+{XRobo OpenStack:xrobo.cinder.volumescreating.fail.prev()}&lt;&gt;&quot;&quot;</expression>
+                                </dependency>
+                            </dependencies>
+                        </trigger>
+                    </triggers>
+                </item>
+            </items>
+        </template>
+    </templates>
+</zabbix_export>
